@@ -22,8 +22,19 @@ private fun uniqueName(parent: DocumentFile, requested: String): String {
 
 fun copyDocumentTree(context: Context, source: DocumentFile, destination: DocumentFile, onProgress: (String) -> Unit): DocumentFile {
     if (!destination.isDirectory) throw IOException("תיקיית היעד אינה תקינה")
-    if (source.uri == destination.uri) throw IOException("לא ניתן להעתיק תיקייה לתוך עצמה")
+    if (source.isDirectory && containsDocument(source, destination.uri)) {
+        throw IOException("לא ניתן להעתיק תיקייה לתוך עצמה או לתוך אחת מתיקיותיה")
+    }
+    if (source.uri == destination.uri) throw IOException("מקור ויעד זהים")
     return copyOne(context, source, destination, onProgress)
+}
+
+private fun containsDocument(directory: DocumentFile, target: android.net.Uri): Boolean {
+    if (directory.uri == target) return true
+    if (!directory.isDirectory) return false
+    return directory.listFiles().any { child ->
+        child.uri == target || (child.isDirectory && containsDocument(child, target))
+    }
 }
 
 private fun copyOne(context: Context, source: DocumentFile, destination: DocumentFile, onProgress: (String) -> Unit): DocumentFile {
