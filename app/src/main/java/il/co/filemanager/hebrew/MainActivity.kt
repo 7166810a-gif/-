@@ -55,6 +55,27 @@ private val Line = Color(0xFFE7ECF3)
 private val Mint = Color(0xFFE5F5EF)
 private val SoftBlue = Color(0xFFE9F0FC)
 
+private data class FileEntry(
+    val document: DocumentFile,
+    val name: String,
+    val isDirectory: Boolean,
+    val mimeType: String?,
+    val lengthBytes: Long,
+    val modifiedAt: Long
+)
+
+private fun snapshotFile(file: DocumentFile): FileEntry {
+    val directory = file.isDirectory
+    return FileEntry(
+        document = file,
+        name = file.name ?: "ללא שם",
+        isDirectory = directory,
+        mimeType = file.type,
+        lengthBytes = if (directory) 0L else file.length().coerceAtLeast(0L),
+        modifiedAt = file.lastModified()
+    )
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,11 +94,13 @@ fun FileManagerApp() {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("file_manager", Context.MODE_PRIVATE) }
     val pathStack = remember { mutableStateListOf<DocumentFile>() }
-    var entries by remember { mutableStateOf<List<DocumentFile>>(emptyList()) }
+    var entries by remember { mutableStateOf<List<FileEntry>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("הכול") }
     var showHidden by remember { mutableStateOf(false) }
-    var sortBySize by remember { mutableStateOf(false) }
+    var sortMode by remember { mutableStateOf("name") }
+    val listRequestId = remember { java.util.concurrent.atomic.AtomicInteger(0) }
     var selectedFile by remember { mutableStateOf<DocumentFile?>(null) }
     var renameDialog by remember { mutableStateOf(false) }
     var deleteDialog by remember { mutableStateOf(false) }
@@ -97,11 +120,36 @@ fun FileManagerApp() {
 
     fun reload() {
         val directory = pathStack.lastOrNull()
-        entries = directory?.listFiles()
-            ?.filter { showHidden || !it.name.orEmpty().startsWith(".") }
-            ?.toList()
-            ?.sortedWith(compareBy<DocumentFile> { !it.isDirectory }.thenBy { it.name.orEmpty().lowercase() })
-            ?: emptyList()
+        if (directory == null) {
+            listRequestId.incrementAndGet()
+            entries = emptyList()
+            isLoading = false
+            return
+        }
+        val requestId = listRequestId.incrementAndGet()
+        val includeHidden = showHidden
+        isLoading = true
+        scope.launch {
+            try {
+                val loaded = withContext(Dispatchers.IO) {
+                    directory.listFiles()
+                        .asSequence()
+                        .filter { includeHidden || !it.name.orEmpty().startsWith(".") }
+                        .map(::snapshotFile)
+                        .sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+                        .toList()
+                }
+                if (requestId == listRequestId.get() && pathStack.lastOrNull()?.uri == directory.uri) {
+                    entries = loaded
+                }
+            } catch (error: Exception) {
+                if (requestId == listRequestId.get()) {
+                    Toast.makeText(context, error.message ?: "לא ניתן לטעון את התיקייה", Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                if (requestId == listRequestId.get()) isLoading = false
+            }
+        }
     }
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -179,10 +227,11 @@ fun FileManagerApp() {
     }
 
     val currentDirectory = pathStack.lastOrNull()
-    val visibleEntries = remember(entries, searchText, selectedCategory, sortBySize) {
+    val visibleEntries = remember(entries, searchText, selectedCategory, sortMode) {
+        val query = searchText.trim()
         val filtered = entries.filter { file ->
-            val nameMatches = file.name.orEmpty().contains(searchText.trim(), ignoreCase = true)
-            val extension = file.name.orEmpty().substringAfterLast('.', "").lowercase()
+            val extension = file.name.substringAfterLast('.', "").lowercase()
+            val nameMatches = query.isEmpty() || file.name.contains(query, ignoreCase = true)
             val categoryMatches = when (selectedCategory) {
                 "תיקיות" -> file.isDirectory
                 "תמונות" -> extension in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "avif")
@@ -194,7 +243,11 @@ fun FileManagerApp() {
             }
             nameMatches && categoryMatches
         }
-        if (sortBySize) filtered.sortedByDescending { it.length() } else filtered
+        when (sortMode) {
+            "size" -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenByDescending { it.lengthBytes })
+            "modified" -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenByDescending { it.modifiedAt })
+            else -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+        }
     }
 
     fun openInside(file: DocumentFile) {
@@ -291,8 +344,28 @@ fun FileManagerApp() {
                                         tint = if (showHidden) Brand else Muted
                                     )
                                 }
-                                IconButton(onClick = { sortBySize = !sortBySize }) {
-                                    Icon(Icons.Rounded.Sort, contentDescription = "מיון", tint = Ink)
+                                IconButton(onClick = {
+                                    sortMode = when (sortMode) {
+                                        "name" -> "size"
+                                        "size" -> "modified"
+                                        else -> "name"
+                                    }
+                                    val label = when (sortMode) {
+                                        "size" -> "מיון לפי גודל"
+                                        "modified" -> "מיון לפי תאריך"
+                                        else -> "מיון לפי שם"
+                                    }
+                                    Toast.makeText(context, label, Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(
+                                        Icons.Rounded.Sort,
+                                        contentDescription = when (sortMode) {
+                                            "size" -> "מיון לפי גודל"
+                                            "modified" -> "מיון לפי תאריך"
+                                            else -> "מיון לפי שם"
+                                        },
+                                        tint = Ink
+                                    )
                                 }
                             } else {
                                 IconButton(onClick = { folderPicker.launch(null) }) {
@@ -340,6 +413,7 @@ fun FileManagerApp() {
                     BrowserScreen(
                         modifier = Modifier.padding(padding),
                         entries = visibleEntries,
+                        isLoading = isLoading,
                         totalCount = entries.size,
                         directoryName = currentDirectory.name.orEmpty(),
                         searchText = searchText,
@@ -347,8 +421,9 @@ fun FileManagerApp() {
                         selectedCategory = selectedCategory,
                         onCategoryChange = { selectedCategory = it },
                         onRefresh = { reload() },
-                        onOpen = { file ->
-                            if (file.isDirectory) {
+                        onOpen = { entry ->
+                            val file = entry.document
+                            if (entry.isDirectory) {
                                 pathStack.add(file)
                                 searchText = ""
                                 selectedCategory = "הכול"
@@ -711,7 +786,8 @@ private fun InfoTile(
 @Composable
 private fun BrowserScreen(
     modifier: Modifier = Modifier,
-    entries: List<DocumentFile>,
+    entries: List<FileEntry>,
+    isLoading: Boolean,
     totalCount: Int,
     directoryName: String,
     searchText: String,
@@ -772,7 +848,18 @@ private fun BrowserScreen(
                 }
             }
         }
-        if (entries.isEmpty()) {
+        if (isLoading) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = Brand,
+                trackColor = SoftBlue
+            )
+        }
+        if (entries.isEmpty() && isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Brand)
+            }
+        } else if (entries.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.size(76.dp).background(SoftBlue, CircleShape), contentAlignment = Alignment.Center) {
@@ -787,11 +874,11 @@ private fun BrowserScreen(
                 contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 100.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(entries, key = { it.uri.toString() }) { file ->
+                items(entries, key = { it.document.uri.toString() }) { entry ->
                     FileRow(
-                        file = file,
-                        onClick = { onOpen(file) },
-                        onMore = { onMore(file) }
+                        file = entry,
+                        onClick = { onOpen(entry) },
+                        onMore = { onMore(entry.document) }
                     )
                 }
             }
@@ -801,8 +888,8 @@ private fun BrowserScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FileRow(file: DocumentFile, onClick: () -> Unit, onMore: () -> Unit) {
-    val extension = file.name.orEmpty().substringAfterLast('.', "").lowercase()
+private fun FileRow(file: FileEntry, onClick: () -> Unit, onMore: () -> Unit) {
+    val extension = file.name.substringAfterLast('.', "").lowercase()
     val folder = file.isDirectory
     val tint = if (folder) Brand else when (extension) {
         "jpg", "jpeg", "png", "gif", "webp", "heic" -> Color(0xFF16856B)
@@ -835,9 +922,9 @@ private fun FileRow(file: DocumentFile, onClick: () -> Unit, onMore: () -> Unit)
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(file.name ?: "ללא שם", color = Ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(file.name, color = Ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (folder) "תיקייה" else formatSize(file.length()) + "  •  " + (file.type ?: extension.uppercase().ifEmpty { "קובץ" }),
+                    if (folder) "תיקייה" else formatSize(file.lengthBytes) + "  •  " + (file.mimeType ?: extension.uppercase().ifEmpty { "קובץ" }),
                     color = Muted,
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1
