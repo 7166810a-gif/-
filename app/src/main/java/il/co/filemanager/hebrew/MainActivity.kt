@@ -193,7 +193,7 @@ fun FileManagerApp() {
                                         .background(SoftBlue, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Rounded.FolderCopy, contentDescription = null, tint = Brand)
+                                    Icon(Icons.Rounded.Folder, contentDescription = null, tint = Brand)
                                 }
                             }
                         },
@@ -618,9 +618,9 @@ private fun FileRow(file: DocumentFile, onClick: () -> Unit, onMore: () -> Unit)
     val icon = if (folder) Icons.Rounded.Folder else when (extension) {
         "jpg", "jpeg", "png", "gif", "webp", "heic" -> Icons.Rounded.Image
         "mp4", "mkv", "mov", "avi" -> Icons.Rounded.Movie
-        "mp3", "wav", "m4a", "ogg", "flac" -> Icons.Rounded.AudioFile
+        "mp3", "wav", "m4a", "ogg", "flac" -> Icons.Rounded.Audiotrack
         "pdf" -> Icons.Rounded.PictureAsPdf
-        "zip", "rar", "7z", "tar", "gz" -> Icons.Rounded.FolderZip
+        "zip", "rar", "7z", "tar", "gz" -> Icons.Rounded.Archive
         else -> Icons.Rounded.InsertDriveFile
     }
     Surface(
