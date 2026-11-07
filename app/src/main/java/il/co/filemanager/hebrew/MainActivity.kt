@@ -603,6 +603,7 @@ private fun BrowserScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileRow(file: DocumentFile, onClick: () -> Unit, onMore: () -> Unit) {
     val extension = file.name.orEmpty().substringAfterLast('.', "").lowercase()
