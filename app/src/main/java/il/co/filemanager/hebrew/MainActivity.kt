@@ -808,7 +808,7 @@ private fun BrowserScreen(
     selectedCategory: String,
     onCategoryChange: (String) -> Unit,
     onRefresh: () -> Unit,
-    onOpen: (DocumentFile) -> Unit,
+    onOpen: (FileEntry) -> Unit,
     onMore: (DocumentFile) -> Unit
 ) {
     val categories = listOf("הכול", "תיקיות", "תמונות", "וידאו", "שמע", "מסמכים", "ארכיונים")
