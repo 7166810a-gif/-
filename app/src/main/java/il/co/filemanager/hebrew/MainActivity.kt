@@ -406,19 +406,61 @@ fun FileManagerApp() {
                 }
             },
             confirmButton = {
-                Row {
-                    if (!file.isDirectory) {
+                Column {
+                    Row {
                         TextButton(onClick = {
-                            shareFile(context, file)
+                            transferSource = file
+                            transferMode = "copy"
                             selectedFile = null
-                        }) { Text("שיתוף") }
+                            transferPicker.launch(null)
+                        }) { Text("העתקה") }
+                        TextButton(onClick = {
+                            transferSource = file
+                            transferMode = "move"
+                            selectedFile = null
+                            transferPicker.launch(null)
+                        }) { Text("העברה") }
+                        if (!file.isDirectory) {
+                            TextButton(onClick = {
+                                shareFile(context, file)
+                                selectedFile = null
+                            }) { Text("שיתוף") }
+                        }
                     }
-                    TextButton(onClick = {
-                        renameText = file.name.orEmpty()
-                        renameDialog = true
-                    }) { Text("שינוי שם") }
-                    TextButton(onClick = { deleteDialog = true }) {
-                        Text("מחיקה", color = Color(0xFFB42318))
+                    Row {
+                        if (file.name.orEmpty().endsWith(".zip", ignoreCase = true)) {
+                            TextButton(onClick = {
+                                selectedFile = null
+                                openInside(file)
+                            }) { Text("עיון ב-ZIP") }
+                        } else {
+                            TextButton(onClick = {
+                                selectedFile = null
+                                scope.launch {
+                                    progressMessage = "דוחס לארכיון ZIP..."
+                                    try {
+                                        withContext(Dispatchers.IO) {
+                                            createZipFromDocument(context, file, currentDirectory!!) { current ->
+                                                scope.launch { progressMessage = current }
+                                            }
+                                        }
+                                        Toast.makeText(context, "קובץ ZIP נוצר בהצלחה", Toast.LENGTH_LONG).show()
+                                    } catch (error: Exception) {
+                                        Toast.makeText(context, error.message ?: "הדחיסה נכשלה", Toast.LENGTH_LONG).show()
+                                    } finally {
+                                        progressMessage = null
+                                        reload()
+                                    }
+                                }
+                            }) { Text("דחיסה ל-ZIP") }
+                        }
+                        TextButton(onClick = {
+                            renameText = file.name.orEmpty()
+                            renameDialog = true
+                        }) { Text("שינוי שם") }
+                        TextButton(onClick = { deleteDialog = true }) {
+                            Text("מחיקה", color = Color(0xFFB42318))
+                        }
                     }
                 }
             },
