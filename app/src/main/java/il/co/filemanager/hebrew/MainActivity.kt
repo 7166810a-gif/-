@@ -6,6 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import android.media.MediaPlayer
+import android.widget.ImageView
+import android.widget.VideoView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -21,6 +24,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -36,6 +42,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Ink = Color(0xFF17243B)
 private val Muted = Color(0xFF718096)
@@ -74,6 +84,16 @@ fun FileManagerApp() {
     var createFolderDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
     var folderText by remember { mutableStateOf("") }
+    var transferSource by remember { mutableStateOf<DocumentFile?>(null) }
+    var transferMode by remember { mutableStateOf("copy") }
+    var progressMessage by remember { mutableStateOf<String?>(null) }
+    var previewFile by remember { mutableStateOf<DocumentFile?>(null) }
+    var zipArchive by remember { mutableStateOf<DocumentFile?>(null) }
+    var zipEntries by remember { mutableStateOf<List<String>>(emptyList()) }
+    var zipLoading by remember { mutableStateOf(false) }
+    var zipError by remember { mutableStateOf<String?>(null) }
+    var showZipDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     fun reload() {
         val directory = pathStack.lastOrNull()
