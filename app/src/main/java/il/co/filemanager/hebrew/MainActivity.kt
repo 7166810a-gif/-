@@ -126,6 +126,44 @@ fun FileManagerApp() {
         }
     }
 
+    val transferPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val source = transferSource
+        if (uri != null && source != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }.onFailure {
+                Toast.makeText(context, "לא ניתן לקבל הרשאת כתיבה ליעד", Toast.LENGTH_LONG).show()
+            }
+            scope.launch {
+                progressMessage = if (transferMode == "move") "מעביר קבצים..." else "מעתיק קבצים..."
+                try {
+                    withContext(Dispatchers.IO) {
+                        val destination = DocumentFile.fromTreeUri(context, uri)
+                            ?: throw IllegalStateException("תיקיית היעד אינה נגישה")
+                        copyDocumentTree(context, source, destination) { current ->
+                            scope.launch { progressMessage = current }
+                        }
+                        if (transferMode == "move" && !source.delete()) {
+                            throw IllegalStateException("הקובץ הועתק אך לא ניתן למחוק את המקור")
+                        }
+                    }
+                    Toast.makeText(context, if (transferMode == "move") "ההעברה הושלמה" else "ההעתקה הושלמה", Toast.LENGTH_LONG).show()
+                } catch (error: Exception) {
+                    Toast.makeText(context, error.message ?: "הפעולה נכשלה", Toast.LENGTH_LONG).show()
+                } finally {
+                    progressMessage = null
+                    transferSource = null
+                    reload()
+                }
+            }
+        } else {
+            transferSource = null
+        }
+    }
+
     LaunchedEffect(Unit) {
         val saved = preferences.getString("root_uri", null)
         if (saved != null) {
