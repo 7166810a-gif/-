@@ -511,6 +511,75 @@ fun FileManagerApp() {
             dismissButton = { TextButton(onClick = { deleteDialog = false }) { Text("ביטול") } }
         )
     }
+    if (showZipDialog && zipArchive != null) {
+        AlertDialog(
+            onDismissRequest = { showZipDialog = false; zipArchive = null },
+            icon = { Icon(Icons.Rounded.Archive, contentDescription = null, tint = Brand) },
+            title = { Text(zipArchive?.name ?: "תוכן הארכיון") },
+            text = {
+                Column(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when {
+                        zipLoading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                        zipError != null -> Text(zipError ?: "שגיאה", color = Color(0xFFB42318))
+                        zipEntries.isEmpty() -> Text("הארכיון ריק")
+                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            items(zipEntries) { entry ->
+                                Text(entry, style = MaterialTheme.typography.bodySmall, color = Ink)
+                                HorizontalDivider(color = Line)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !zipLoading && zipError == null && currentDirectory != null,
+                    onClick = {
+                        val archive = zipArchive
+                        val destination = currentDirectory
+                        if (archive != null && destination != null) {
+                            showZipDialog = false
+                            scope.launch {
+                                progressMessage = "מחלץ קבצים..."
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        extractZipSafely(context, archive, destination) { current ->
+                                            scope.launch { progressMessage = current }
+                                        }
+                                    }
+                                    Toast.makeText(context, "החילוץ הושלם בתיקייה חדשה", Toast.LENGTH_LONG).show()
+                                } catch (error: Exception) {
+                                    Toast.makeText(context, error.message ?: "החילוץ נכשל", Toast.LENGTH_LONG).show()
+                                } finally {
+                                    progressMessage = null
+                                    zipArchive = null
+                                    reload()
+                                }
+                            }
+                        }
+                    }
+                ) { Text("חלץ לכאן") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showZipDialog = false; zipArchive = null }) { Text("סגירה") }
+            }
+        )
+    }
+
+    if (progressMessage != null) {
+        AlertDialog(
+            onDismissRequest = {},
+            icon = { CircularProgressIndicator() },
+            title = { Text("הפעולה מתבצעת") },
+            text = { Text(progressMessage ?: "מעבד...") },
+            confirmButton = {}
+        )
+    }
+
+    previewFile?.let { file ->
+        MediaPreviewDialog(file = file, onClose = { previewFile = null })
+    }
+
 }
 
 @Composable
