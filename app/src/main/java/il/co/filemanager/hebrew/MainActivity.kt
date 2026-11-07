@@ -227,26 +227,39 @@ fun FileManagerApp() {
     }
 
     val currentDirectory = pathStack.lastOrNull()
-    val visibleEntries = remember(entries, searchText, selectedCategory, sortMode) {
-        val query = searchText.trim()
-        val filtered = entries.filter { file ->
-            val extension = file.name.substringAfterLast('.', "").lowercase()
-            val nameMatches = query.isEmpty() || file.name.contains(query, ignoreCase = true)
-            val categoryMatches = when (selectedCategory) {
-                "תיקיות" -> file.isDirectory
-                "תמונות" -> extension in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "avif")
-                "וידאו" -> extension in setOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
-                "שמע" -> extension in setOf("mp3", "m4a", "aac", "ogg", "wav", "flac", "opus")
-                "מסמכים" -> extension in setOf("pdf", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "md")
-                "ארכיונים" -> extension in setOf("zip", "rar", "7z", "tar", "gz")
-                else -> true
+    var visibleEntries by remember { mutableStateOf<List<FileEntry>>(emptyList()) }
+    var appliedSearchText by remember { mutableStateOf("") }
+
+    LaunchedEffect(searchText) {
+        delay(180)
+        appliedSearchText = searchText
+    }
+
+    LaunchedEffect(entries, appliedSearchText, selectedCategory, sortMode) {
+        val source = entries
+        val query = appliedSearchText.trim()
+        val category = selectedCategory
+        val sorting = sortMode
+        visibleEntries = withContext(Dispatchers.Default) {
+            val filtered = source.filter { file ->
+                val extension = file.name.substringAfterLast('.', "").lowercase()
+                val nameMatches = query.isEmpty() || file.name.contains(query, ignoreCase = true)
+                val categoryMatches = when (category) {
+                    "תיקיות" -> file.isDirectory
+                    "תמונות" -> extension in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "avif")
+                    "וידאו" -> extension in setOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
+                    "שמע" -> extension in setOf("mp3", "m4a", "aac", "ogg", "wav", "flac", "opus")
+                    "מסמכים" -> extension in setOf("pdf", "txt", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "rtf", "md")
+                    "ארכיונים" -> extension in setOf("zip", "rar", "7z", "tar", "gz")
+                    else -> true
+                }
+                nameMatches && categoryMatches
             }
-            nameMatches && categoryMatches
-        }
-        when (sortMode) {
-            "size" -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenByDescending { it.lengthBytes })
-            "modified" -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenByDescending { it.modifiedAt })
-            else -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+            when (sorting) {
+                "size" -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenByDescending { it.lengthBytes })
+                "modified" -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenByDescending { it.modifiedAt })
+                else -> filtered.sortedWith(compareBy<FileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+            }
         }
     }
 
