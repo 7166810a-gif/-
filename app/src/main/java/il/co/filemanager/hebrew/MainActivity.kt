@@ -197,6 +197,32 @@ fun FileManagerApp() {
         if (sortBySize) filtered.sortedByDescending { it.length() } else filtered
     }
 
+    fun openInside(file: DocumentFile) {
+        val extension = file.name.orEmpty().substringAfterLast('.', "").lowercase()
+        val images = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "avif")
+        val videos = setOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
+        val audio = setOf("mp3", "m4a", "aac", "ogg", "wav", "flac", "opus")
+        when {
+            extension in images || extension in videos || extension in audio -> previewFile = file
+            extension == "zip" -> {
+                zipArchive = file
+                showZipDialog = true
+                zipLoading = true
+                zipError = null
+                scope.launch {
+                    try {
+                        zipEntries = withContext(Dispatchers.IO) { listZipEntries(context, file) }
+                    } catch (error: Exception) {
+                        zipError = error.message ?: "לא ניתן לקרוא את הארכיון"
+                    } finally {
+                        zipLoading = false
+                    }
+                }
+            }
+            else -> openFile(context, file)
+        }
+    }
+
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         MaterialTheme(
             colorScheme = lightColorScheme(
@@ -328,7 +354,7 @@ fun FileManagerApp() {
                                 selectedCategory = "הכול"
                                 reload()
                             } else {
-                                openFile(context, file)
+                                openInside(file)
                             }
                         },
                         onMore = { selectedFile = it }
