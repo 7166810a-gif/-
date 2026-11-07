@@ -685,28 +685,25 @@ private fun HomeScreen(
         item {
             Box(
                 Modifier.fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(listOf(Color(0xFF244A80), Color(0xFF557FCA))),
-                        RoundedCornerShape(28.dp)
-                    )
-                    .padding(22.dp)
+                    .background(Color.White, RoundedCornerShape(20.dp))
+                    .padding(20.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
-                        Modifier.size(48.dp).background(Color.White.copy(alpha = 0.16f), CircleShape),
+                        Modifier.size(48.dp).background(SoftBlue, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+                        Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = Brand, modifier = Modifier.size(26.dp))
                     }
-                    Text("הכול במקום אחד.", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("הקבצים שלך", color = Ink, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "סייר קבצים פשוט, מהיר ופרטי. פותחים תיקייה ומתחילים לעבוד.",
-                        color = Color.White.copy(alpha = 0.88f),
+                        "כל המסמכים, התמונות והקבצים שלך במקום אחד.",
+                        color = Muted,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Button(
                         onClick = onChooseFolder,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Brand),
+                        colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = Color.White),
                         shape = RoundedCornerShape(14.dp),
                         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
                     ) {
@@ -884,15 +881,22 @@ private fun BrowserScreen(
             }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 100.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxSize().background(Color.White),
+                contentPadding = PaddingValues(start = 0.dp, end = 0.dp, top = 4.dp, bottom = 100.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 items(entries, key = { it.document.uri.toString() }) { entry ->
-                    FileRow(
-                        file = entry,
-                        onClick = { onOpen(entry) },
-                        onMore = { onMore(entry.document) }
-                    )
+                    Column {
+                        FileRow(
+                            file = entry,
+                            onClick = { onOpen(entry) },
+                            onMore = { onMore(entry.document) }
+                        )
+                        HorizontalDivider(
+                            color = Line,
+                            modifier = Modifier.padding(start = 68.dp, end = 16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -922,12 +926,12 @@ private fun FileRow(file: FileEntry, onClick: () -> Unit, onMore: () -> Unit) {
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(0.dp),
         color = Color.White,
-        shadowElevation = 1.dp
+        shadowElevation = 0.dp
     ) {
         Row(
-            Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onMore).padding(start = 12.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onMore).padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.size(44.dp).background(tint.copy(alpha = 0.11f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
