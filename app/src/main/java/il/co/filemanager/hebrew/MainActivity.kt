@@ -885,3 +885,210 @@ private fun formatDate(timestamp: Long): String {
     return java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
         .format(java.util.Date(timestamp))
 }
+
+
+@Composable
+private fun MediaPreviewDialog(file: DocumentFile, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val extension = file.name.orEmpty().substringAfterLast('.', "").lowercase()
+    val imageTypes = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "avif")
+    val videoTypes = setOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
+    when {
+        extension in imageTypes -> Dialog(
+            onDismissRequest = onClose,
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.88f).padding(12.dp),
+                color = Color(0xFF101827),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(file.name ?: "תמונה", color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
+                        IconButton(onClick = onClose) {
+                            Icon(Icons.Rounded.Close, contentDescription = "סגירה", tint = Color.White)
+                        }
+                    }
+                    AndroidView(
+                        factory = { viewContext ->
+                            ImageView(viewContext).apply {
+                                scaleType = ImageView.ScaleType.FIT_CENTER
+                                adjustViewBounds = true
+                                setBackgroundColor(android.graphics.Color.rgb(16, 24, 39))
+                                setImageURI(file.uri)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().weight(1f)
+                    )
+                }
+            }
+        }
+        extension in videoTypes -> VideoPreviewDialog(file = file, onClose = onClose)
+        else -> AudioPreviewDialog(file = file, onClose = onClose)
+    }
+}
+
+@Composable
+private fun VideoPreviewDialog(file: DocumentFile, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val videoView = remember(file.uri) { VideoView(context) }
+    DisposableEffect(videoView, file.uri) {
+        videoView.setVideoURI(file.uri)
+        val controller = android.widget.MediaController(context)
+        controller.setAnchorView(videoView)
+        videoView.setMediaController(controller)
+        videoView.setOnPreparedListener { player ->
+            player.isLooping = false
+            videoView.start()
+        }
+        onDispose {
+            runCatching { videoView.stopPlayback() }
+        }
+    }
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            color = Color(0xFF101827),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(file.name ?: "וידאו", color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Rounded.Close, contentDescription = "סגירה", tint = Color.White)
+                    }
+                }
+                AndroidView(
+                    factory = { videoView },
+                    modifier = Modifier.fillMaxWidth().height(260.dp)
+                )
+                Text("הנגן משתמש במפענחי המדיה המובנים של Android.", color = Color.LightGray, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioPreviewDialog(file: DocumentFile, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var player by remember(file.uri) { mutableStateOf<MediaPlayer?>(null) }
+    var prepared by remember(file.uri) { mutableStateOf(false) }
+    var playing by remember(file.uri) { mutableStateOf(false) }
+    var duration by remember(file.uri) { mutableIntStateOf(0) }
+    var position by remember(file.uri) { mutableIntStateOf(0) }
+    var playerError by remember(file.uri) { mutableStateOf<String?>(null) }
+
+    DisposableEffect(file.uri) {
+        val mediaPlayer = MediaPlayer()
+        player = mediaPlayer
+        mediaPlayer.setOnPreparedListener {
+            duration = it.duration.coerceAtLeast(0)
+            prepared = true
+            it.start()
+            playing = true
+        }
+        mediaPlayer.setOnCompletionListener {
+            playing = false
+            position = 0
+        }
+        mediaPlayer.setOnErrorListener { _, _, _ ->
+            playerError = "לא ניתן לנגן את קובץ השמע הזה"
+            true
+        }
+        try {
+            mediaPlayer.setDataSource(context, file.uri)
+            mediaPlayer.prepareAsync()
+        } catch (error: Exception) {
+            playerError = error.message ?: "לא ניתן לפתוח את קובץ השמע"
+        }
+        onDispose {
+            runCatching { mediaPlayer.stop() }
+            mediaPlayer.release()
+            player = null
+        }
+    }
+
+    LaunchedEffect(prepared, player) {
+        while (prepared && player != null) {
+            position = runCatching { player?.currentPosition ?: 0 }.getOrDefault(0)
+            delay(400)
+        }
+    }
+
+    Dialog(onDismissRequest = onClose) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White,
+            shape = RoundedCornerShape(26.dp)
+        ) {
+            Column(
+                Modifier.padding(22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    Modifier.size(76.dp).background(SoftBlue, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Rounded.Audiotrack, contentDescription = null, tint = Brand, modifier = Modifier.size(36.dp))
+                }
+                Text(file.name ?: "נגן שמע", style = MaterialTheme.typography.titleMedium, color = Ink, maxLines = 2)
+                if (playerError != null) {
+                    Text(playerError ?: "", color = Color(0xFFB42318))
+                } else if (!prepared) {
+                    CircularProgressIndicator()
+                    Text("טוען שמע...", color = Muted, style = MaterialTheme.typography.labelMedium)
+                } else {
+                    Slider(
+                        value = position.toFloat().coerceIn(0f, duration.coerceAtLeast(1).toFloat()),
+                        onValueChange = { value ->
+                            position = value.toInt()
+                            player?.seekTo(position)
+                        },
+                        valueRange = 0f..duration.coerceAtLeast(1).toFloat()
+                    )
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(formatTime(position), color = Muted, style = MaterialTheme.typography.labelSmall)
+                        Text(formatTime(duration), color = Muted, style = MaterialTheme.typography.labelSmall)
+                    }
+                    FilledIconButton(
+                        onClick = {
+                            val active = player ?: return@FilledIconButton
+                            if (active.isPlaying) {
+                                active.pause()
+                                playing = false
+                            } else {
+                                if (position >= duration && duration > 0) active.seekTo(0)
+                                active.start()
+                                playing = true
+                            }
+                        },
+                        enabled = prepared,
+                        modifier = Modifier.size(58.dp)
+                    ) {
+                        Icon(
+                            if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (playing) "השהיה" else "ניגון",
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+                }
+                TextButton(onClick = onClose) { Text("סגירה") }
+            }
+        }
+    }
+}
+
+private fun formatTime(milliseconds: Int): String {
+    val seconds = (milliseconds.coerceAtLeast(0) / 1000)
+    val minutesPart = seconds / 60
+    val secondsPart = seconds % 60
+    return String.format(java.util.Locale.ROOT, "%d:%02d", minutesPart, secondsPart)
+}
